@@ -6,7 +6,7 @@ load_dotenv()
 
 config = {
   "apiKey": os.getenv("FIREBASE_API_KEY"),
-  "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN "),
+  "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN"),
   "databaseURL": os.getenv("FIREBASE_DATABASE_URL"),
   "projectId": os.getenv("FIREBASE_PROJECT_ID"),
   "storageBucket": None
