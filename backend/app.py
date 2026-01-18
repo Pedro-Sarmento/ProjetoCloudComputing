@@ -31,7 +31,7 @@ def create_app():
 
     @app.get("/")
     def root():
-        return redirect("http://127.0.0.1:5500/ProjetoCloudComputing/frontEnd/login.html")
+        return redirect("https://pedro-sarmento.github.io/ProjetoCloudComputing/frontEnd/login.html")
     
     @app.get("/api/csrf")
     def csrf():
@@ -40,6 +40,3 @@ def create_app():
     return app
 
 
-if __name__ == "__main__":
-    app = create_app()
-    app.run(host="127.0.0.1", port=5000, debug=True)

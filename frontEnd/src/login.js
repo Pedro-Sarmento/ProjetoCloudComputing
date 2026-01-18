@@ -1,4 +1,4 @@
-const API_BASE = "https://projeto-cloud-backend.onrender.com";
+const API_BASE = "https://projetocloudcomputing.onrender.com";
 
 let csrfToken = null;
 
