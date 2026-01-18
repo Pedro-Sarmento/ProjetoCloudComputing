@@ -1,19 +1,17 @@
 from flask import Blueprint, jsonify, session
-from services.user_service import get_profile
+from firebase_startup import db
 
 user_bp = Blueprint("user", __name__)
 
 @user_bp.get("/me")
 def me():
-    from firebase_startup import db
-
-    uid = session.get("uid")
-    if not uid:
+    username = session.get("username")
+    if not username:
         return jsonify({"logged_in": False}), 200
 
-    try:
-        profile = get_profile(db, uid)
-    except Exception:
-        profile = None
+    profile = db.child("users").child(username).get().val()
+    if profile:
+        profile.pop("password_hash", None) 
 
-    return jsonify({"logged_in": True, "uid": uid, "profile": profile}), 200
+    return jsonify({"logged_in": True, "profile": profile}), 200
+

@@ -1,79 +1,57 @@
 from flask import Blueprint, request, jsonify, session
+from werkzeug.security import generate_password_hash, check_password_hash
 from services.csrf_service import require_csrf, issue_csrf_token
-from services.auth_service import make_email, firebase_register, firebase_login
-from services.user_service import (
-    username_lookup,
-    set_profile,
-    set_username_index,
-    get_profile,
-)
+from firebase_startup import db
 
 auth_bp = Blueprint("auth", __name__)
 
 @auth_bp.post("/register")
 def register():
-    from firebase_startup import auth, db
-
     if not require_csrf():
         return jsonify({"error": "CSRF check failed"}), 403
 
     data = request.get_json(silent=True) or {}
-    username = (data.get("username") or "").strip()
-    student_number = (data.get("studentNumber") or "").strip()
+
+    username = (data.get("username") or "").strip().lower()
     password = data.get("password") or ""
-    age = data.get("age")
+    student_number = (data.get("studentNumber") or "").strip()
     course = data.get("course")
 
-    if not username or not student_number or not password or not course:
-        return jsonify({"error": "Missing required fields"}), 400
-
-    username_key = username.lower()
-
+    age_raw = data.get("age")
     try:
-        age = int(age)
+        age = int(age_raw)
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid age"}), 400
+
+    if not username or not password or not student_number or not course:
+        return jsonify({"error": "Missing required fields"}), 400
     if age <= 0:
         return jsonify({"error": "Invalid age"}), 400
 
     try:
-        existing = username_lookup(db, username_key)
+        if db.child("users").child(username).get().val():
+            return jsonify({"error": "Username already exists"}), 400
     except Exception:
-        existing = None
-    if existing:
-        return jsonify({"error": "Username already taken"}), 400
+        return jsonify({"error": "Database error"}), 500
 
-    email = make_email(student_number)
+    password_hash = generate_password_hash(password)
 
     try:
-        uid = firebase_register(auth, email, password)
-    except Exception:
-        return jsonify({"error": "Could not create user (maybe already exists)."}), 400
+        db.child("users").child(username).set({
+            "username": username,
+            "password_hash": password_hash,
+            "studentNumber": student_number,
+            "age": age,
+            "course": course
+        })
+    except Exception as e:
+        return jsonify({"error": "Something went wrong saving user"}), 500
 
-    profile = {
-        "username": username,
-        "studentNumber": student_number,
-        "age": age,
-        "course": course,
-    }
-
-    try:
-        set_profile(db, uid, profile)
-    except Exception:
-        return jsonify({"error": "User created but failed saving profile."}), 500
-
-    try:
-        set_username_index(db, username_key, uid)
-    except Exception:
-        return jsonify({"error": "User created but username index failed."}), 500
-
-    return jsonify({"ok": True, "uid": uid})
+    return jsonify({"ok": True}), 201
 
 
 @auth_bp.post("/login")
 def login():
-    from firebase_startup import auth, db
-
     if not require_csrf():
         return jsonify({"error": "CSRF check failed"}), 403
 
@@ -85,40 +63,30 @@ def login():
         return jsonify({"error": "Missing username or password"}), 400
 
     try:
-        lookup = username_lookup(db, username)
+        user = db.child("users").child(username).get().val()
     except Exception:
-        return jsonify({"error": "Login failed"}), 400
+        return jsonify({"error": "Database error"}), 500
 
-    if not lookup or "uid" not in lookup:
+    if not user:
         return jsonify({"error": "Invalid credentials"}), 401
 
-    uid = lookup["uid"]
-
-    try:
-        profile = get_profile(db, uid)
-    except Exception:
-        return jsonify({"error": "Login failed"}), 400
-
-    if not profile or "studentNumber" not in profile:
-        return jsonify({"error": "Login failed"}), 400
-
-    email = make_email(profile["studentNumber"])
-
-    try:
-        user = firebase_login(auth, email, password)
-    except Exception:
+    if not check_password_hash(user.get("password_hash", ""), password):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    session["uid"] = uid
-    session["idToken"] = user.get("idToken")
-    issue_csrf_token() 
+    session["username"] = username
 
-    return jsonify({"ok": True})
+    issue_csrf_token()
+
+    return jsonify({"ok": True}), 200
 
 
 @auth_bp.post("/logout")
 def logout():
     if not require_csrf():
         return jsonify({"error": "CSRF check failed"}), 403
+
     session.clear()
-    return jsonify({"ok": True})
+
+    issue_csrf_token()
+
+    return jsonify({"ok": True}), 200
